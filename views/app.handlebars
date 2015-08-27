@@ -1,0 +1,236 @@
+<p>(<span id="numClients"></span> desktop clients connected)</p>
+
+<ul class="lines">
+    <li id="line-1"></li>
+    <li id="line-2"></li>
+    <li id="line-3"></li>
+    <li id="line-4"></li>
+    <li id="line-5"></li>
+    <li id="line-6"></li>
+    <li id="line-7"></li>
+    <li id="line-8"></li>
+    <li id="line-9"></li>
+    <li id="line-10"></li>
+</ul>
+
+<button id="move-up">Move up</button>
+<button id="move-down">Move down</button>
+<div id="timer"></div>
+
+<script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+<script src="http://code.jquery.com/jquery-1.11.1.js"></script>
+<script>
+    var colors = [
+        '#B0171F',
+        '#8B5F65',
+        '#8B8386',
+        '#FF00FF',
+        '#800080',
+        '#551A8B',
+        '#00008B',
+        '#F0F8FF',
+        '#00868B',
+        '#2F4F4F',
+        '#008B45',
+        '#228B22',
+        '#556B2F',
+        '#8B814C',
+        '#EE9A00',
+        '#FF9912',
+        '#D2691E',
+        '#FF4500',
+        '#FF4040',
+        '#7171C6'
+    ];
+    var socket = io();
+
+    // update when a user joins/leaves
+    socket.on('user-update', function(users) {
+        $('#numClients').text(users);
+    });
+
+    // received once for a new user
+    socket.on('render-your-player', function(user) {
+        var userNewData = createPlayer(user);
+        socket.emit('player-rendered', userNewData);
+        // startTimer();
+    });
+
+    // only received by a new user after they have a position
+    socket.on('render-other-players', function(users, yourId) {
+        for (var u in users) {
+            var user = users[u];
+            if (user.id !== yourId && user.line) {
+                movePlayer(user);
+            }
+        }
+    });
+
+    // received by other users when someone new joins
+    socket.on('player-update', function(user, allUsers) {
+        movePlayer(user);
+        countLines(allUsers);
+    });
+
+    // when someone leaves
+    socket.on('player-destroy', function(id) {
+        removePlayer(id);
+    });
+
+    // when someone leaves
+    socket.on('reset-line-count', function(users) {
+        countLines(users);
+    });
+
+
+    var countLines = function (users) {
+        var magicLine = [2, 5];
+        console.log('counting lines');
+        var lines = {};
+        for (var u in users) {
+            var user = users[u];
+            if (!lines[user.line]) {
+                lines[user.line] = 1;
+            } else {
+                lines[user.line] = lines[user.line]+1;
+            }
+        }
+        if (lines[user.line] && lines[user.line] >= 2 &&
+            magicLine.indexOf(user.line) !== -1) {
+            startTimer();
+        } else {
+            clearTimer();
+        }
+    };
+
+
+    var countdownTimer;
+    var $t = $('#timer');
+
+    var clearTimer = function () {
+        $t.text('');
+        window.clearInterval(countdownTimer);
+    };
+
+    var startTimer = function (secondsToCountDown) {
+        if (countdownTimer) { window.clearInterval(countdownTimer); }
+        if (!secondsToCountDown) { secondsToCountDown = 10; }
+        $t.text(secondsToCountDown);
+        // tick down every second
+        countdownTimer = window.setInterval(function(){
+            $t.text(secondsToCountDown--);
+            if (secondsToCountDown < 0) {
+                clearTimer();
+                $('body').html('<img src="http://7-themes.com/data_images/out/60/6975466-end-of-the-world.jpg" style="width: 100%; height: 100%;" />');
+            }
+        }, 1000);
+    };
+
+    var removePlayer = function (id) {
+        var player = $('#player-' + id);
+        player.remove();
+    };
+
+    var movePlayer = function (user) {
+        var player = $('#player-' + user.id);
+        if (player.length === 0) { // create new
+            player = createPlayer(user);
+        } else { // move existing
+            player.appendTo('#line-' + user.line);
+        }
+    }
+
+    var createPlayer = function (user) {
+        var numLines = $('.lines > li').length;
+        var isYou = false;
+        if (!user.line) { // call for a new player
+            isYou = true;
+            user.line = getRandomInt(1, numLines);
+            user.color = colors[Math.floor(Math.random()*colors.length)];
+        }
+
+        var $player = $('<span style="background-color: ' + user.color + ';" class="player" id="player-' + user.id + '" data-user="' + user.id + '" data-line="' + user.line + '">' + user.id + '</span>');
+        if (isYou) {
+            $player.addClass('is-you');
+            $player.text('You');
+            $player.attr('id', 'you');
+        }
+        $player.appendTo('#line-' + user.line);
+        return user;
+    };
+
+    var getRandomInt = function (min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    };
+
+    $('#move-up').click(function(){
+        $you = $('#you');
+        var curLine = parseInt($you.attr('data-line'));
+        var nextLine = curLine - 1;
+        if (nextLine > 0) {
+            var newElm = $('#line-' + nextLine);
+            $you.appendTo(newElm);
+            $you.attr('data-line', nextLine);
+            var id = $(you).attr('data-user');
+            socket.emit('player-moved', id, nextLine);
+            // startTimer();
+        }
+    });
+
+    $('#move-down').click(function(){
+        $you = $('#you');
+        var numLines = $('.lines > li').length;
+        var curLine = parseInt($you.attr('data-line'));
+        var nextLine = curLine + 1;
+        if (nextLine <= numLines) {
+            var newElm = $('#line-' + nextLine);
+            $you.appendTo(newElm);
+            $you.attr('data-line', nextLine);
+            var id = $(you).attr('data-user');
+            socket.emit('player-moved', id, nextLine);
+            // startTimer();
+        }
+    });
+
+
+</script>
+
+<style>
+    .lines {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .lines li {
+        border-top: 3px solid red;
+        margin: 45px 0;
+        position: relative;
+    }
+
+    .lines li:empty {
+        border-color: #cccccc;
+    }
+
+    .player {
+        font-family: arial;
+        border-radius: 100px;
+        background-color: red;
+        width: 50px;
+        height: 50px;
+        display: block;
+        text-align: center;
+        line-height: 50px;
+        top: -25px;
+        left: 25px;
+        position: absolute;
+        white-space: nowrap;
+    }
+
+    .is-you {
+        border: 6px solid #000000;
+        top: -28px;
+        left: 19px;
+        z-index: 100;
+    }
+</style>
